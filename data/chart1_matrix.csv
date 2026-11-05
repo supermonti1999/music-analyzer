@@ -1,0 +1,24 @@
+level,name,demand_bn,score,trend_pct,test,test_value,chart_share
+context,Pop,476.9,0.44,-13,no,0.94,0.2103
+context,Hip-Hop/Rap,436.0,0.29,-17,yes,1.39,0.1361
+family,Rock,248.1,0.83,44,yes,1.9,0.1015
+context,Latin Pop/Regional,237.6,0.35,-17,yes,1.14,0.0978
+context,Latin Urban,132.8,0.57,-17,no,0.85,0.054
+family,R&B/Soul,131.4,0.79,25,yes,1.07,0.0588
+context,Dance/Electronic,114.8,0.54,-4,no,0.79,0.0274
+context,Brazilian,79.5,0.57,0,yes,1.31,0.0624
+context,Indie/Alternative,71.7,0.79,-15,no,0.76,0.035
+context,Country,64.7,0.54,-36,no,0.82,0.0184
+context,K-Pop/Asian Pop,61.4,0.49,16,yes,2.38,0.0448
+family,Indian/South Asian,57.3,0.7,-22,no,0.96,0.0312
+context,Metal,51.1,0.56,-34,no,0.08,0.0028
+family,Classical/Soundtrack,28.3,0.65,-17,yes,1.7,0.0162
+context,Afro,21.5,0.4,32,yes,1.43,0.0173
+family,SE-Asian Local,19.7,0.59,18,no,0.98,0.0241
+family,Reggae/Dancehall,18.0,0.58,28,yes,2.1,
+context,European Local,13.8,0.13,0,yes,1.98,0.0212
+family,Funk/Disco/New Wave,11.0,0.71,145,yes,2.34,
+context,Jazz/Blues,9.4,0.75,-3,no,0.48,0.0042
+context,Children/Holiday,7.3,0.38,5,yes,1.43,0.0016
+context,Arabic/Middle East,4.6,0.27,22,yes,1.8,0.0103
+context,Folk/Singer-Songwriter,1.9,0.38,-8,no,0.61,0.003
