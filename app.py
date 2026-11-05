@@ -597,9 +597,10 @@ with tab_sound:
                 z = pd.read_csv(zpath)
                 keep = [c for c in z.columns if c.endswith("_top") or ":" in c]
                 f = f.merge(z[["track_id"] + keep], on="track_id", how="left")
+            scaled_artists = set(f.loc[f["group"].astype(str).str.contains("scaled_solo"), "artist_id"])
             def grp(r):
                 if bool(r["breakout"]): return "Breakout songs"
-                if r["tier"] == "scaled": return "Scaled solo, other songs"
+                if r["artist_id"] in scaled_artists: return "Scaled solo, other songs"
                 if r["tier"] == "active" and r["role"] == "solo": return "Curated active solo"
                 if r["tier"] == "active": return "Active bands"
                 return "Legacy bands"
