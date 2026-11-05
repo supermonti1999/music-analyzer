@@ -186,8 +186,8 @@ med_v = float(med_all.iloc[0, 0]) if len(med_all) and med_all.iloc[0, 0] is not 
 c5.metric("Age mean | median (yrs)", f"{(kpi.mean_age or 0):.1f} | {med_v:.1f}", help="Stream-weighted age of the tracks at the time of the stream: mean and median")
 c6.metric("Streams on tracks ≥5 yrs", f"{100*(kpi.old_share or 0):.0f} %", help="Share of streams on tracks that were at least 5 years old when streamed")
 
-tab_matrix, tab_time, tab_map, tab_cmp, tab_genre, tab_age, tab_top, tab_data = st.tabs(
-    ["Matrix & Shortlist", "Time series", "Map", "Market comparison", "Genre matrix", "Track age", "Top tracks & artists", "Data & coverage"])
+tab_matrix, tab_sound, tab_time, tab_map, tab_cmp, tab_genre, tab_age, tab_top, tab_data = st.tabs(
+    ["Matrix & Shortlist", "Sound profile", "Time series", "Map", "Market comparison", "Genre matrix", "Track age", "Top tracks & artists", "Data & coverage"])
 
 # ---- matrix & shortlist (pre-computed markers, independent of the sidebar filters) --------
 KPI = {
@@ -581,6 +581,89 @@ with tab_data:
 - Release date: earliest known date of the song (single or album), from `songs.csv`.
 - Data: {min_m:%Y-%m} to {max_m:%Y-%m}, {len(COUNTRIES)} markets.
 """)
+
+
+# ---- sound profile: audio analysis of the reference and breakout previews --------------------------
+with tab_sound:
+    a_dir = os.path.join(PROC, "audio")
+    fpath, zpath, epath = [os.path.join(a_dir, n) for n in ("solo_audio_features.csv", "solo_audio_zeroshot.csv", "solo_audio_clap.npy")]
+    if not os.path.exists(fpath):
+        st.info("Audio tables missing (audio/solo_audio_features.csv).")
+    else:
+        @st.cache_data
+        def load_audio():
+            f = pd.read_csv(fpath)
+            if os.path.exists(zpath):
+                z = pd.read_csv(zpath)
+                keep = [c for c in z.columns if c.endswith("_top") or ":" in c]
+                f = f.merge(z[["track_id"] + keep], on="track_id", how="left")
+            def grp(r):
+                if bool(r["breakout"]): return "Breakout songs"
+                if r["tier"] == "scaled": return "Scaled solo, other songs"
+                if r["tier"] == "active" and r["role"] == "solo": return "Curated active solo"
+                if r["tier"] == "active": return "Active bands"
+                return "Legacy bands"
+            f["group_name"] = f.apply(grp, axis=1)
+            if os.path.exists(epath):
+                E = np.load(epath)
+                E = E / np.linalg.norm(E, axis=1, keepdims=True)
+                c = E[f["breakout"].values.astype(bool)].mean(axis=0); c = c / np.linalg.norm(c)
+                f["sim_centre"] = (E @ c).round(3)
+            return f
+        A = load_audio()
+        ORDER = ["Breakout songs", "Scaled solo, other songs", "Curated active solo", "Active bands", "Legacy bands"]
+        st.markdown("**How the breakout songs sound, measured on 30-second previews.** 219 previews: the 16 breakout songs of the solo acts that scaled since 2017, "
+                    "the other charted songs of those acts, and the top songs of the 58 curated alt/indie acts (active solo, active bands, legacy bands). "
+                    "Tempo, key, loudness, dynamic range and spectral balance are computed from the audio (numpy and scipy); vocal, guitar, drums, production and mood are "
+                    "CLAP zero-shot descriptors (similarity of the audio embedding to text prompts, read as the winning prompt per track). "
+                    "Similarity to centre = cosine similarity of the track's CLAP embedding to the mean of the 16 breakout songs. This is the data behind the sound brief in the Production section.")
+        rows = []
+        for g in ORDER:
+            d = A[A.group_name == g]
+            if d.empty: continue
+            r = {"Group": g, "Tracks": len(d), "Tempo (BPM, median)": round(d.tempo_bpm.median()), "Minor key share": (d["mode"] == "minor").mean(),
+                 "Low-end share (<150 Hz)": d.low_share.median(), "High share (>2 kHz)": d.high_share.median(), "Dynamic range (dB)": round(d.dyn_range_db.median(), 1)}
+            if "drums_top" in d:
+                r["Programmed / 808 drums"] = (d.drums_top == "programmed drums with 808 bass").mean()
+                r["Live drum kit"] = (d.drums_top == "live drum kit").mean()
+                r["Clean reverb / chorus guitar"] = (d.guitar_top == "clean electric guitar with reverb and chorus").mean()
+                r["Distorted guitar"] = (d.guitar_top == "distorted overdriven electric guitar").mean()
+                r["Belted vocals"] = (d.vocal_top == "powerful belted vocals").mean()
+            if "sim_centre" in d: r["Similarity to breakout centre"] = round(d.sim_centre.mean(), 3)
+            rows.append(r)
+        G = pd.DataFrame(rows).set_index("Group")
+        pct_cols = [c for c in G.columns if c in ("Minor key share", "Low-end share (<150 Hz)", "High share (>2 kHz)", "Programmed / 808 drums", "Live drum kit", "Clean reverb / chorus guitar", "Distorted guitar", "Belted vocals")]
+        st.dataframe(G.style.format({c: "{:.0%}" for c in pct_cols}), use_container_width=True)
+        st.caption("Read the CLAP columns as differences between groups, not as absolute facts: the model judges a 30-second chorus and mislabels tight, dry live drums as programmed.")
+        c1, c2 = st.columns(2)
+        with c1:
+            fig_s = px.scatter(A, x="tempo_bpm", y="low_share", color="group_name", category_orders={"group_name": ORDER}, color_discrete_sequence=SERIES,
+                               hover_data={"artist": True, "title": True, "key": True, "mode": True, "group_name": False, "tempo_bpm": ":.0f", "low_share": ":.2f"},
+                               labels={"tempo_bpm": "Tempo (BPM)", "low_share": "Low-end share (<150 Hz)", "group_name": ""})
+            fig_s.update_traces(marker=dict(size=9, opacity=0.8))
+            fig_s.update_layout(height=460, plot_bgcolor=SURFACE, paper_bgcolor=SURFACE, margin=dict(l=10, r=10, t=30, b=10), legend=dict(orientation="h", y=-0.2), title="Tempo against low-end share: the two lanes and the bass-forward mix")
+            st.plotly_chart(fig_s, use_container_width=True)
+        with c2:
+            if "sim_centre" in A:
+                fig_c = px.box(A, x="group_name", y="sim_centre", color="group_name", category_orders={"group_name": ORDER}, color_discrete_sequence=SERIES, points="all",
+                               hover_data={"artist": True, "title": True, "group_name": False}, labels={"group_name": "", "sim_centre": "Similarity to breakout centre"})
+                fig_c.update_layout(height=460, showlegend=False, plot_bgcolor=SURFACE, paper_bgcolor=SURFACE, margin=dict(l=10, r=10, t=30, b=10), title="How close each group sits to the breakout sound")
+                st.plotly_chart(fig_c, use_container_width=True)
+        st.markdown("**Every track.** Filter and sort; the most central tracks are the triangulation set in the artist profile.")
+        f1, f2 = st.columns([2, 3])
+        gsel = f1.multiselect("Groups", ORDER, default=ORDER, key="snd_groups")
+        q = f2.text_input("Artist or title contains", "", key="snd_q")
+        T = A[A.group_name.isin(gsel)]
+        if q:
+            T = T[T.artist.str.contains(q, case=False, na=False) | T.title.str.contains(q, case=False, na=False)]
+        cols = [c for c in ["artist", "title", "group_name", "tempo_bpm", "key", "mode", "loudness_db", "dyn_range_db", "low_share", "high_share", "vocal_top", "guitar_top", "drums_top", "production_top", "mood_top", "sim_centre"] if c in T.columns]
+        T = T[cols].rename(columns={"group_name": "group", "tempo_bpm": "tempo", "loudness_db": "loudness dB", "dyn_range_db": "dyn range dB", "low_share": "low share", "high_share": "high share",
+                                    "vocal_top": "vocal", "guitar_top": "guitar", "drums_top": "drums", "production_top": "production", "mood_top": "mood", "sim_centre": "sim. to centre"})
+        if "sim. to centre" in T: T = T.sort_values("sim. to centre", ascending=False)
+        st.dataframe(T, use_container_width=True, height=420, hide_index=True)
+        st.download_button("Download this table (CSV)", T.to_csv(index=False).encode("utf-8"), "sound_profile.csv", "text/csv", key="snd_dl")
+        st.caption("Caveats: 16 breakout songs is a small base; previews are 30-second excerpts, usually the chorus; CLAP is a general audio-text model, not a genre or drum classifier; "
+                   "every group reads as 'euphoric' and '1990s' in absolute terms, so only the differences are used. Files: audio/solo_audio_features.csv, solo_audio_zeroshot.csv, solo_audio_clap.npy.")
 
 st.divider()
 st.caption("Data: Spotify Daily Top 200 via the Kaggle export \"Spotify Charts Daily Updated\" (gonzalopezgil, CC BY-SA 4.0), 72 countries, Jan 2017 to Oct 2026; "
